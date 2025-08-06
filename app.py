@@ -2,7 +2,7 @@ import streamlit as st
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 
 # MODEL_DIR = "./saved_model"
-MODEL_HF_REPO = "rafino/sentimen-mbg-model"
+MODEL_HF_REPO = "finoraf/sentimen-mbg-model"
 
 @st.cache_resource
 def load_model_pipeline():
