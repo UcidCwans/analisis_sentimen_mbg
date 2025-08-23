@@ -73,7 +73,7 @@ def load_model_pipeline():
 #     pipe = pipeline("text-classification", model=model, tokenizer=tokenizer)
 #     return pipe
 
-# pipe = load_model_pipeline()
+pipe = load_model_pipeline()
 
 label_map = {
     'label_0': 'Negatif',
