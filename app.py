@@ -6,6 +6,7 @@ import re
 import emoji
 import string
 import time
+import subprocess
 
 from bs4 import BeautifulSoup
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
@@ -20,7 +21,6 @@ load_dotenv()
 
 st.markdown("""
     <style>
-    /* Mengincar semua tombol di dalam sidebar */
     [data-testid="stSidebar"] div.stButton > button {
         width: 100%;
         text-align: left;
@@ -117,7 +117,7 @@ if not st.session_state['logged_in']:
                     res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     st.session_state['logged_in'] = True
                     st.session_state['user_email'] = res.user.email
-                    st.success("Login berhasil! Memuat sistem...")
+                    st.success("Login berhasil")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e:
@@ -131,6 +131,10 @@ else:
         
         if st.button("Dashboard", use_container_width=True):
             st.session_state['active_menu'] = "dashboard"
+            st.rerun()
+
+        if st.button("Scraping Data", use_container_width=True):
+            st.session_state['active_menu'] = "scraping"
             st.rerun()
             
         if st.button("Dataset & Preprocessing", use_container_width=True):
@@ -172,7 +176,78 @@ else:
         else:
             st.info("Belum ada data di database. Silakan lakukan prediksi.")
 
-    # --- DATASET & PREPRO ---
+    # --- SCRAPING DATA ---
+    elif st.session_state['active_menu'] == "scraping":
+        st.header("🕷️ Scraping Data X (Twitter)")
+        st.info("Fitur ini menggunakan **Tweet Harvest (Node.js)**. Pastikan Node.js terinstal di sistem ini.")
+
+        with st.form("scraping_form"):
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                search_keyword = st.text_input("Kata Kunci Pencarian", value="Makan Bergizi Gratis lang:id")
+                limit_tweets = st.number_input("Jumlah Tweet (Limit)", min_value=10, max_value=2000, value=20, step=10)
+            with col_s2:
+                auth_token = st.text_input("Twitter Auth Token", type="password", help="Hanya masukkan kode uniknya saja.")
+                filename_output = st.text_input("Nama File Output (tanpa .csv)", value="hasil_scraping")
+            
+            submit_scrape = st.form_submit_button("Mulai Scraping 🚀", use_container_width=True)
+
+        if submit_scrape:
+            if not auth_token:
+                st.warning("Mohon masukkan Auth Token Twitter Anda.")
+            else:
+                clean_token = auth_token.strip().replace('"', '').replace("'", "")
+                if clean_token.startswith("auth_token="):
+                    clean_token = clean_token.replace("auth_token=", "")
+                
+                output_file = f"{filename_output}.csv"
+                
+                command = [
+                    "npx", "-y", "tweet-harvest@latest",
+                    "-o", output_file,
+                    "-s", search_keyword,
+                    "-l", str(limit_tweets),
+                    "--token", clean_token
+                ]
+
+                try:
+                    with st.spinner(f"Sedang mencari tweet tentang '{search_keyword}'..."):
+                        process = subprocess.run(command, capture_output=True, text=True, shell=True)
+
+                    if process.returncode == 0:
+                        folder_path = os.path.join(os.getcwd(), "tweets-data", output_file)
+                        root_path = output_file 
+                        
+                        final_path = None
+                        if os.path.exists(folder_path):
+                            final_path = folder_path
+                        elif os.path.exists(root_path):
+                            final_path = root_path
+
+                        if final_path:
+                            st.success(f"✅ Scraping Selesai! {limit_tweets} tweet berhasil diambil.")
+                            
+                            df_scraped = pd.read_csv(final_path)
+                            st.write(f"**Preview Data ({len(df_scraped)} baris):**")
+                            st.dataframe(df_scraped.head())
+
+                            csv_data = df_scraped.to_csv(index=False).encode('utf-8')
+                            st.download_button("📥 Download Hasil Scraping", csv_data, output_file, "text/csv")
+                            st.info("Download file ini, lalu upload di menu **📤 Dataset & Preprocessing**.")
+                        else:
+                            st.warning(f"Proses selesai, tapi file tidak ditemukan di folder 'tweets-data'.")
+                            st.caption(f"Sistem mencari di: {folder_path}")
+                            with st.expander("Lihat Log Proses"):
+                                st.code(process.stdout)
+                    else:
+                        st.error("Terjadi kesalahan sistem (Token Invalid atau Koneksi).")
+                        with st.expander("Lihat Detail Error"):
+                            st.code(process.stderr)
+
+                except Exception as e:
+                    st.error(f"Gagal menjalankan perintah: {e}")
+
+    # --- DATASET & PREPROCESSING ---
     elif st.session_state['active_menu'] == "dataset":
         st.header("📤 Manajemen Dataset")
         up_file = st.file_uploader("Upload file CSV", type=["csv"])
